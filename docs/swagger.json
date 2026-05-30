@@ -2,7 +2,7 @@
     "swagger": "2.0",
     "info": {
         "description": "API para gestionar motos",
-        "title": "Motos API",
+        "title": "RutaSegura Api",
         "termsOfService": "http://swagger.io/terms/",
         "contact": {
             "name": "API Support",

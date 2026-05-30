@@ -4133,7 +4133,7 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "localhost:8888",
 	BasePath:         "/",
 	Schemes:          []string{},
-	Title:            "Motos API",
+	Title:            "RutaSegura Api",
 	Description:      "API para gestionar motos",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,

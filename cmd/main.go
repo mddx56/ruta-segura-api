@@ -17,11 +17,12 @@ import (
 	_ "github.com/Caknoooo/go-gin-clean-starter/database/migrations"
 	_ "github.com/Caknoooo/go-gin-clean-starter/docs"
 	"github.com/Caknoooo/go-gin-clean-starter/middlewares"
-	"github.com/Caknoooo/go-gin-clean-starter/modules/alarm_rule"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/alarm_incident"
+	"github.com/Caknoooo/go-gin-clean-starter/modules/alarm_rule"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/alarm_type"
 	appversionmodule "github.com/Caknoooo/go-gin-clean-starter/modules/app_version"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/auth"
+	authRepo "github.com/Caknoooo/go-gin-clean-starter/modules/auth/repository"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/backup"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/dashboard"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/device"
@@ -40,15 +41,14 @@ import (
 	"github.com/Caknoooo/go-gin-clean-starter/providers"
 	"github.com/Caknoooo/go-gin-clean-starter/script"
 	"gorm.io/gorm"
-	authRepo "github.com/Caknoooo/go-gin-clean-starter/modules/auth/repository"
-	
+
 	devService "github.com/Caknoooo/go-gin-clean-starter/modules/device/service"
 	posService "github.com/Caknoooo/go-gin-clean-starter/modules/position/service"
 	"github.com/Caknoooo/go-gin-clean-starter/providers/grpc_server"
 	providerWS "github.com/Caknoooo/go-gin-clean-starter/providers/websocket"
 )
 
-// @title           Motos API
+// @title           RutaSegura API
 // @version         0.1.2
 // @description     API para gestionar motos
 // @termsOfService  http://swagger.io/terms/
@@ -114,10 +114,10 @@ func main() {
 	}
 
 	server := gin.Default()
-	
+
 	// Middleware de compresión JSON (GZIP) Optimización
 	server.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPaths([]string{"/api/realtime/ws"})))
-	
+
 	server.Use(middlewares.CORSMiddleware())
 
 	// Register module routes
@@ -160,14 +160,14 @@ func main() {
 		devSvc := do.MustInvoke[devService.DeviceService](injector)
 		posSvc := do.MustInvoke[posService.PositionService](injector)
 		wsSvc, _ := do.Invoke[providerWS.WebsocketService](injector)
-		
+
 		portGRPC := os.Getenv("GRPC_PORT")
 		if portGRPC == "" {
 			portGRPC = ":50051"
 		} else {
 			portGRPC = ":" + portGRPC
 		}
-		
+
 		grpc_server.StartGRPCServer(devSvc, posSvc, wsSvc, db, portGRPC)
 	}()
 
