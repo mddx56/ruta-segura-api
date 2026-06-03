@@ -36,6 +36,7 @@ func formatValidationError(err error) string {
 type (
 	AuthController interface {
 		Register(ctx *gin.Context)
+		Signup(ctx *gin.Context)
 		Login(ctx *gin.Context)
 		RefreshToken(ctx *gin.Context)
 		Logout(ctx *gin.Context)
@@ -98,6 +99,41 @@ func (c *authController) Register(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, res)
 }
 
+// Signup godoc
+// @Summary      Registro de usuario normal
+// @Description  Registra un nuevo usuario con rol de usuario normal (sin autenticación requerida)
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        signup  body      dto.UserCreateRequest  true  "Signup Request"
+// @Success      200     {object}  utils.Response
+// @Failure      400     {object}  utils.Response
+// @Router       /api/auth/signup [post]
+func (c *authController) Signup(ctx *gin.Context) {
+	var req dto.UserCreateRequest
+	if err := ctx.ShouldBind(&req); err != nil {
+		res := utils.BuildResponseFailed(dto.MESSAGE_FAILED_GET_DATA_FROM_BODY, formatValidationError(err), nil)
+		ctx.AbortWithStatusJSON(http.StatusBadRequest, res)
+		return
+	}
+
+	if err := c.authValidation.ValidateRegisterRequest(req); err != nil {
+		res := utils.BuildResponseFailed("Validation failed", formatValidationError(err), nil)
+		ctx.AbortWithStatusJSON(http.StatusBadRequest, res)
+		return
+	}
+
+	result, err := c.authService.Signup(ctx.Request.Context(), req)
+	if err != nil {
+		res := utils.BuildResponseFailed(dto.MESSAGE_FAILED_REGISTER_USER, err.Error(), nil)
+		ctx.JSON(http.StatusBadRequest, res)
+		return
+	}
+
+	res := utils.BuildResponseSuccess(dto.MESSAGE_SUCCESS_REGISTER_USER, result)
+	ctx.JSON(http.StatusOK, res)
+}
+
 // Login godoc
 // @Summary      Login user
 // @Description  Login user with email and password
@@ -125,8 +161,15 @@ func (c *authController) Login(ctx *gin.Context) {
 
 	result, err := c.authService.Login(ctx.Request.Context(), req)
 	if err != nil {
+		statusCode := http.StatusUnauthorized // 401 por defecto para credenciales inválidas
+		switch {
+		case errors.Is(err, authDto.ErrLoginRateLimited):
+			statusCode = http.StatusTooManyRequests // 429
+		case errors.Is(err, authDto.ErrUserBlocked), errors.Is(err, authDto.ErrUserDisabled):
+			statusCode = http.StatusLocked // 423
+		}
 		res := utils.BuildResponseFailed(dto.MESSAGE_FAILED_LOGIN, err.Error(), nil)
-		ctx.JSON(http.StatusBadRequest, res)
+		ctx.JSON(statusCode, res)
 		return
 	}
 

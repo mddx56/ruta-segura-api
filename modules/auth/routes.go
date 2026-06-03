@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"time"
+
 	"github.com/Caknoooo/go-gin-clean-starter/middlewares"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/auth/controller"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/auth/service"
@@ -13,9 +15,16 @@ func RegisterRoutes(server *gin.Engine, injector *do.Injector) {
 	authController := do.MustInvoke[controller.AuthController](injector)
 	jwtService := do.MustInvokeNamed[service.JWTService](injector, constants.JWTService)
 
+	const (
+		signupMaxRequests = 1
+		signupWindow      = time.Minute
+	)
+	signupLimit := middlewares.RateLimit(signupMaxRequests, signupWindow)
+
 	authRoutes := server.Group("/api/auth")
 	{
 		authRoutes.POST("/register", authController.Register)
+		authRoutes.POST("/signup", signupLimit, authController.Signup)
 		authRoutes.POST("/login", authController.Login)
 		authRoutes.POST("/refresh", authController.RefreshToken)
 		authRoutes.POST("/logout", middlewares.Authenticate(jwtService), authController.Logout)

@@ -2,6 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
+	"log"
+	"strings"
+	"time"
 
 	"github.com/Caknoooo/go-gin-clean-starter/database/entities"
 	appDto "github.com/Caknoooo/go-gin-clean-starter/modules/app_version/dto"
@@ -10,15 +14,24 @@ import (
 	authRepo "github.com/Caknoooo/go-gin-clean-starter/modules/auth/repository"
 	userDto "github.com/Caknoooo/go-gin-clean-starter/modules/user/dto"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/user/repository"
-	"github.com/Caknoooo/go-gin-clean-starter/pkg/helpers"
 	"github.com/Caknoooo/go-gin-clean-starter/pkg/constants"
+	"github.com/Caknoooo/go-gin-clean-starter/pkg/helpers"
 	"github.com/Caknoooo/go-gin-clean-starter/pkg/utils"
+	redisProvider "github.com/Caknoooo/go-gin-clean-starter/providers/redis"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 )
 
+const loginMaxAttempts = 5
+
+func loginAttemptsKey(identifier string) string {
+	return "login:attempts:" + strings.ToLower(identifier)
+}
+
 type AuthService interface {
 	Register(ctx context.Context, req userDto.UserCreateRequest) (userDto.UserResponse, error)
+	Signup(ctx context.Context, req userDto.UserCreateRequest) (userDto.UserResponse, error)
 	Login(ctx context.Context, req userDto.UserLoginRequest) (dto.TokenResponse, error)
 	RefreshToken(ctx context.Context, req dto.RefreshTokenRequest) (dto.TokenResponse, error)
 	Logout(ctx context.Context, userId string) error
@@ -33,6 +46,7 @@ type authService struct {
 	refreshTokenRepository authRepo.RefreshTokenRepository
 	appVersionRepository   appRepo.AppVersionRepository
 	jwtService             JWTService
+	redis                  redisProvider.RedisService
 	db                     *gorm.DB
 }
 
@@ -41,6 +55,7 @@ func NewAuthService(
 	refreshTokenRepo authRepo.RefreshTokenRepository,
 	appVersionRepo appRepo.AppVersionRepository,
 	jwtService JWTService,
+	redis redisProvider.RedisService,
 	db *gorm.DB,
 ) AuthService {
 	return &authService{
@@ -48,7 +63,35 @@ func NewAuthService(
 		refreshTokenRepository: refreshTokenRepo,
 		appVersionRepository:   appVersionRepo,
 		jwtService:             jwtService,
+		redis:                  redis,
 		db:                     db,
+	}
+}
+
+// checkLoginRateLimit devuelve ErrLoginRateLimited si la clave superó el umbral.
+// Ante cualquier error de Redis falla abierto (no bloquea al usuario).
+func (s *authService) checkLoginRateLimit(ctx context.Context, key string) error {
+	if s.redis == nil {
+		return nil
+	}
+	count, exists, err := s.redis.GetInt(ctx, key)
+	if err != nil {
+		log.Printf("[rate-limit] error al consultar Redis: %v", err)
+		return nil
+	}
+	if exists && count >= loginMaxAttempts {
+		return dto.ErrLoginRateLimited
+	}
+	return nil
+}
+
+// incrementLoginAttempts registra un intento fallido con ventana deslizante de 15 min.
+func (s *authService) incrementLoginAttempts(ctx context.Context, key string) {
+	if s.redis == nil {
+		return
+	}
+	if _, err := s.redis.IncrWithTTL(ctx, key, 15*time.Minute); err != nil {
+		log.Printf("[rate-limit] error al incrementar intentos en Redis: %v", err)
 	}
 }
 
@@ -92,6 +135,54 @@ func (s *authService) Register(ctx context.Context, req userDto.UserCreateReques
 	}, nil
 }
 
+func (s *authService) Signup(ctx context.Context, req userDto.UserCreateRequest) (userDto.UserResponse, error) {
+	_, isExist, err := s.userRepository.CheckEmail(ctx, s.db, req.Email)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return userDto.UserResponse{}, err
+	}
+	if isExist {
+		return userDto.UserResponse{}, userDto.ErrEmailAlreadyExists
+	}
+
+	user := entities.User{
+		ID:         uuid.New(),
+		Name:       req.Name,
+		Username:   &req.Username,
+		Email:      req.Email,
+		TelpNumber: req.TelpNumber,
+		Password:   req.Password,
+		Role:       constants.ENUM_ROLE_USER,
+		IsVerified: false,
+	}
+
+	createdUser, err := s.userRepository.Register(ctx, s.db, user)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			if strings.Contains(pgErr.ConstraintName, "username") {
+				return userDto.UserResponse{}, userDto.ErrUsernameAlreadyExists
+			}
+			if strings.Contains(pgErr.ConstraintName, "email") {
+				return userDto.UserResponse{}, userDto.ErrEmailAlreadyExists
+			}
+		}
+		return userDto.UserResponse{}, err
+	}
+
+	return userDto.UserResponse{
+		ID:          createdUser.ID.String(),
+		Name:        createdUser.Name,
+		Username:    createdUser.Username,
+		Email:       createdUser.Email,
+		TelpNumber:  createdUser.TelpNumber,
+		Role:        createdUser.Role,
+		RoleLiteral: constants.RoleLiteral(createdUser.Role),
+		ImageUrl:    createdUser.ImageUrl,
+		IsVerified:  createdUser.IsVerified,
+		IsBlocked:   createdUser.IsBlocked,
+	}, nil
+}
+
 func (s *authService) Login(ctx context.Context, req userDto.UserLoginRequest) (dto.TokenResponse, error) {
 	identifier := ""
 	if req.Email != nil && *req.Email != "" {
@@ -100,8 +191,16 @@ func (s *authService) Login(ctx context.Context, req userDto.UserLoginRequest) (
 		identifier = *req.Username
 	}
 
+	key := loginAttemptsKey(identifier)
+
+	// Verificar rate limit antes de tocar la base de datos
+	if err := s.checkLoginRateLimit(ctx, key); err != nil {
+		return dto.TokenResponse{}, err
+	}
+
 	user, err := s.userRepository.GetUserByUsernameOrEmail(ctx, s.db, identifier)
 	if err != nil {
+		s.incrementLoginAttempts(ctx, key)
 		return dto.TokenResponse{}, userDto.ErrUserNotFound
 	}
 
@@ -115,7 +214,15 @@ func (s *authService) Login(ctx context.Context, req userDto.UserLoginRequest) (
 
 	isValid, err := helpers.CheckPassword(user.Password, []byte(req.Password))
 	if err != nil || !isValid {
+		s.incrementLoginAttempts(ctx, key)
 		return dto.TokenResponse{}, dto.ErrInvalidCredentials
+	}
+
+	// Login exitoso → limpiar contador
+	if s.redis != nil {
+		if err := s.redis.Delete(ctx, key); err != nil {
+			log.Printf("[rate-limit] error al limpiar intentos en Redis: %v", err)
+		}
 	}
 
 	accessToken := s.jwtService.GenerateAccessToken(user.ID.String(), user.Role)

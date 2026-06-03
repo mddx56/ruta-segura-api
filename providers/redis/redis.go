@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -14,6 +15,10 @@ type RedisService interface {
 	Get(ctx context.Context, key string) (string, error)
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error
 	Delete(ctx context.Context, key string) error
+	// GetInt devuelve el entero almacenado en la clave. exists=false si la clave no existe.
+	GetInt(ctx context.Context, key string) (count int64, exists bool, err error)
+	// IncrWithTTL incrementa el contador y renueva el TTL en un pipeline atómico (ventana deslizante).
+	IncrWithTTL(ctx context.Context, key string, expiration time.Duration) (int64, error)
 	Client() *redis.Client // Expone el cliente en crudo para operaciones complejas como Pub/Sub
 }
 
@@ -56,6 +61,31 @@ func (r *redisService) Set(ctx context.Context, key string, value interface{}, e
 
 func (r *redisService) Delete(ctx context.Context, key string) error {
 	return r.client.Del(ctx, key).Err()
+}
+
+func (r *redisService) GetInt(ctx context.Context, key string) (int64, bool, error) {
+	val, err := r.client.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	count, err := strconv.ParseInt(val, 10, 64)
+	if err != nil {
+		return 0, false, nil
+	}
+	return count, true, nil
+}
+
+func (r *redisService) IncrWithTTL(ctx context.Context, key string, expiration time.Duration) (int64, error) {
+	pipe := r.client.Pipeline()
+	incrCmd := pipe.Incr(ctx, key)
+	pipe.Expire(ctx, key, expiration)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return 0, err
+	}
+	return incrCmd.Val(), nil
 }
 
 func (r *redisService) Client() *redis.Client {

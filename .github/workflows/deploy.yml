@@ -68,10 +68,13 @@ jobs:
             # Según tu código (script/command.go), este es el comando correcto
             ./ruta-api --migrate:run
 
+            # 5. EJECUTAMOS EL SEED (idempotente: no duplica si el usuario ya existe)
+            ./ruta-api --seed
+
             # En caso de querer usar la herramienta reset:
             # (Úsalo solo bajo tu propia responsabilidad ingresando tú mismo al ssh)
             # ./reset-db
 
-            # 5. Iniciamos y revisamos que todo esté OK
+            # 6. Iniciamos y revisamos que todo esté OK
             sudo systemctl start ruta-segura-api
             sudo systemctl status ruta-segura-api --no-pager

@@ -54,7 +54,8 @@ func RegisterDependencies(injector *do.Injector) {
 	appVersionRepo, _ := appVersionRepoPkg.NewAppVersionRepository(injector)
 
 	userService := userService.NewUserService(userRepository, deviceInstallationRepo, groupRepository, db)
-	authService := authService.NewAuthService(userRepository, refreshTokenRepository, appVersionRepo, jwtService, db)
+	redisService, _ := do.InvokeNamed[redisProvider.RedisService](injector, "Redis")
+	authService := authService.NewAuthService(userRepository, refreshTokenRepository, appVersionRepo, jwtService, redisService, db)
 
 	do.Provide(
 		injector, func(i *do.Injector) (userController.UserController, error) {

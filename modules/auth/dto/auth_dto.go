@@ -23,8 +23,9 @@ var (
 	ErrRefreshTokenExpired  = errors.New("refresh token expirado")
 	ErrInvalidCredentials   = errors.New("credenciales invalidas")
 	ErrPasswordResetToken   = errors.New("token de restablecimiento de contraseña invalido")
-	ErrUserBlocked          = errors.New("usuario sin acceso comuniquese con el administrador")
+	ErrUserBlocked          = errors.New("usuario sin acceso, comuniquese con el administrador")
 	ErrUserDisabled         = errors.New("cuenta desactivada, contacte al administrador")
+	ErrLoginRateLimited     = errors.New("demasiados intentos fallidos, intente de nuevo en 15 minutos")
 )
 
 type (

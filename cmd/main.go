@@ -15,7 +15,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 
 	_ "github.com/Caknoooo/go-gin-clean-starter/database/migrations"
-	_ "github.com/Caknoooo/go-gin-clean-starter/docs"
+	"github.com/Caknoooo/go-gin-clean-starter/docs"
 	"github.com/Caknoooo/go-gin-clean-starter/middlewares"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/alarm_incident"
 	"github.com/Caknoooo/go-gin-clean-starter/modules/alarm_rule"
@@ -106,6 +106,10 @@ func main() {
 	var (
 		injector = do.New()
 	)
+
+	if host := os.Getenv("APP_HOST"); host != "" {
+		docs.SwaggerInfo.Host = host
+	}
 
 	providers.RegisterDependencies(injector)
 
