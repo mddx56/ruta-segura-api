@@ -16,7 +16,7 @@ func RegisterRoutes(server *gin.Engine, injector *do.Injector) {
 	jwtService := do.MustInvokeNamed[service.JWTService](injector, constants.JWTService)
 
 	const (
-		signupMaxRequests = 1
+		signupMaxRequests = 3
 		signupWindow      = time.Minute
 	)
 	signupLimit := middlewares.RateLimit(signupMaxRequests, signupWindow)

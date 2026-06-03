@@ -70,6 +70,13 @@ func (rl *RateLimiter) allow(ip string) bool {
 }
 
 func formatWindow(d time.Duration) string {
+	if d < time.Minute {
+		seconds := int(math.Round(d.Seconds()))
+		if seconds == 1 {
+			return "1 segundo"
+		}
+		return fmt.Sprintf("%d segundos", seconds)
+	}
 	minutes := int(math.Round(d.Minutes()))
 	if minutes == 1 {
 		return "1 minuto"
