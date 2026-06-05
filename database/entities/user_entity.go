@@ -18,6 +18,7 @@ type User struct {
 	ImageUrl   string    `gorm:"type:varchar(255)" json:"image_url"`
 	IsVerified bool      `gorm:"default:false" json:"is_verified"`
 	IsBlocked  bool      `gorm:"default:false" json:"is_blocked"`
+	GoogleID   *string   `gorm:"type:varchar(255);uniqueIndex" json:"-"`
 
 	Groups []Group `gorm:"foreignKey:UserID" json:"groups,omitempty"`
 

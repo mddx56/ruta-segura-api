@@ -1,8 +1,6 @@
 module github.com/Caknoooo/go-gin-clean-starter
 
-go 1.24.0
-
-toolchain go1.24.2
+go 1.25.0
 
 require (
 	github.com/Caknoooo/go-pagination v0.1.0
@@ -30,9 +28,11 @@ require github.com/gorilla/websocket v1.5.3
 require github.com/gin-contrib/gzip v1.0.1
 
 require (
+	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/redis/go-redis/v9 v9.19.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
+	golang.org/x/oauth2 v0.36.0 // indirect
 )
 
 require (

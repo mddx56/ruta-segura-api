@@ -13,12 +13,14 @@ type (
 		GetUserById(ctx context.Context, tx *gorm.DB, userId string) (entities.User, error)
 		GetUserByEmail(ctx context.Context, tx *gorm.DB, email string) (entities.User, error)
 		GetUserByUsernameOrEmail(ctx context.Context, tx *gorm.DB, usernameOrEmail string) (entities.User, error)
+		GetUserByGoogleID(ctx context.Context, tx *gorm.DB, googleID string) (entities.User, error)
 		CheckEmail(ctx context.Context, tx *gorm.DB, email string) (entities.User, bool, error)
 		CheckUsername(ctx context.Context, tx *gorm.DB, username string) (entities.User, bool, error)
 		Update(ctx context.Context, tx *gorm.DB, user entities.User) (entities.User, error)
 		UpdatePassword(ctx context.Context, tx *gorm.DB, userId string, hashedPassword string) error
 		UpdateBlockStatus(ctx context.Context, tx *gorm.DB, userId string, isBlocked bool) error
 		UpdateStatus(ctx context.Context, tx *gorm.DB, userId string, status bool) error
+		UpdateGoogleID(ctx context.Context, tx *gorm.DB, userID string, googleID string) error
 	}
 
 	userRepository struct {
@@ -150,4 +152,25 @@ func (r *userRepository) UpdateStatus(ctx context.Context, tx *gorm.DB, userId s
 	}
 
 	return nil
+}
+
+func (r *userRepository) GetUserByGoogleID(ctx context.Context, tx *gorm.DB, googleID string) (entities.User, error) {
+	if tx == nil {
+		tx = r.db
+	}
+
+	var user entities.User
+	if err := tx.WithContext(ctx).Where("google_id = ?", googleID).Take(&user).Error; err != nil {
+		return entities.User{}, err
+	}
+
+	return user, nil
+}
+
+func (r *userRepository) UpdateGoogleID(ctx context.Context, tx *gorm.DB, userID string, googleID string) error {
+	if tx == nil {
+		tx = r.db
+	}
+
+	return tx.WithContext(ctx).Model(&entities.User{}).Where("id = ?", userID).Update("google_id", googleID).Error
 }

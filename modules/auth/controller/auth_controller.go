@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -12,8 +14,9 @@ import (
 	"github.com/Caknoooo/go-gin-clean-starter/pkg/constants"
 	"github.com/Caknoooo/go-gin-clean-starter/pkg/utils"
 	"github.com/gin-gonic/gin"
-	"github.com/samber/do"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
+	"github.com/samber/do"
 	"gorm.io/gorm"
 )
 
@@ -44,6 +47,8 @@ type (
 		VerifyEmail(ctx *gin.Context)
 		SendPasswordReset(ctx *gin.Context)
 		ResetPassword(ctx *gin.Context)
+		GoogleRedirect(ctx *gin.Context)
+		GoogleCallback(ctx *gin.Context)
 	}
 
 	authController struct {
@@ -74,29 +79,33 @@ func NewAuthController(injector *do.Injector, as service.AuthService) AuthContro
 // @Failure      400       {object}  utils.Response
 // @Router       /api/auth/register [post]
 func (c *authController) Register(ctx *gin.Context) {
-	var req dto.UserCreateRequest
-	if err := ctx.ShouldBind(&req); err != nil {
-		res := utils.BuildResponseFailed(dto.MESSAGE_FAILED_GET_DATA_FROM_BODY, formatValidationError(err), nil)
-		ctx.AbortWithStatusJSON(http.StatusBadRequest, res)
-		return
-	}
+	// Not implemented - endpoint disabled for security reasons
+	// var req dto.UserCreateRequest
+	// if err := ctx.ShouldBind(&req); err != nil {
+	// 	res := utils.BuildResponseFailed(dto.MESSAGE_FAILED_GET_DATA_FROM_BODY, formatValidationError(err), nil)
+	// 	ctx.AbortWithStatusJSON(http.StatusBadRequest, res)
+	// 	return
+	// }
 
-	// Validate request
-	if err := c.authValidation.ValidateRegisterRequest(req); err != nil {
-		res := utils.BuildResponseFailed("Validation failed", formatValidationError(err), nil)
-		ctx.AbortWithStatusJSON(http.StatusBadRequest, res)
-		return
-	}
+	// // Validate request
+	// if err := c.authValidation.ValidateRegisterRequest(req); err != nil {
+	// 	res := utils.BuildResponseFailed("Validation failed", formatValidationError(err), nil)
+	// 	ctx.AbortWithStatusJSON(http.StatusBadRequest, res)
+	// 	return
+	// }
 
-	result, err := c.authService.Register(ctx.Request.Context(), req)
-	if err != nil {
-		res := utils.BuildResponseFailed(dto.MESSAGE_FAILED_REGISTER_USER, err.Error(), nil)
-		ctx.JSON(http.StatusBadRequest, res)
-		return
-	}
+	// result, err := c.authService.Register(ctx.Request.Context(), req)
+	// if err != nil {
+	// 	res := utils.BuildResponseFailed(dto.MESSAGE_FAILED_REGISTER_USER, err.Error(), nil)
+	// 	ctx.JSON(http.StatusBadRequest, res)
+	// 	return
+	// }
 
-	res := utils.BuildResponseSuccess(dto.MESSAGE_SUCCESS_REGISTER_USER, result)
-	ctx.JSON(http.StatusOK, res)
+	// res := utils.BuildResponseSuccess(dto.MESSAGE_SUCCESS_REGISTER_USER, result)
+	// ctx.JSON(http.StatusOK, res)
+
+	res := utils.BuildResponseFailed("Not implemented", "This endpoint is not available", nil)
+	ctx.JSON(http.StatusNotImplemented, res)
 }
 
 // Signup godoc
@@ -345,4 +354,63 @@ func (c *authController) ResetPassword(ctx *gin.Context) {
 
 	res := utils.BuildResponseSuccess(authDto.MESSAGE_SUCCESS_RESET_PASSWORD, nil)
 	ctx.JSON(http.StatusOK, res)
+}
+
+// GoogleRedirect godoc
+// @Summary      Iniciar login con Google
+// @Description  Redirige al usuario al consent screen de Google OAuth
+// @Tags         auth
+// @Success      307
+// @Router       /api/auth/google [get]
+func (c *authController) GoogleRedirect(ctx *gin.Context) {
+	state := uuid.New().String()
+	ctx.SetCookie("oauth_state", state, 300, "/", "", false, true)
+	url := c.authService.GoogleGetAuthURL(state)
+	ctx.Redirect(http.StatusTemporaryRedirect, url)
+}
+
+// GoogleCallback godoc
+// @Summary      Callback de Google OAuth
+// @Description  Procesa el codigo de Google, crea o busca el usuario y retorna tokens JWT
+// @Tags         auth
+// @Produce      json
+// @Param        code   query     string  true  "Authorization code de Google"
+// @Param        state  query     string  true  "State para validacion CSRF"
+// @Success      200    {object}  utils.Response
+// @Failure      400    {object}  utils.Response
+// @Router       /api/auth/google/callback [get]
+func (c *authController) GoogleCallback(ctx *gin.Context) {
+	sendPostMessage := func(payload any) {
+		b, _ := json.Marshal(payload)
+		html := fmt.Sprintf(`<!DOCTYPE html><html><body><script>
+window.opener && window.opener.postMessage(%s, '*');
+window.close();
+</script></body></html>`, string(b))
+		ctx.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+	}
+
+	cookieState, err := ctx.Cookie("oauth_state")
+	if err != nil || cookieState != ctx.Query("state") {
+		sendPostMessage(map[string]any{"type": "google_auth", "error": true, "message": "estado OAuth invalido"})
+		return
+	}
+
+	code := ctx.Query("code")
+	if code == "" {
+		sendPostMessage(map[string]any{"type": "google_auth", "error": true, "message": "codigo OAuth faltante"})
+		return
+	}
+
+	result, err := c.authService.GoogleCallback(ctx.Request.Context(), code)
+	if err != nil {
+		sendPostMessage(map[string]any{"type": "google_auth", "error": true, "message": err.Error()})
+		return
+	}
+
+	sendPostMessage(map[string]any{
+		"type":          "google_auth",
+		"access_token":  result.AccessToken,
+		"refresh_token": result.RefreshToken,
+		"user":          result.User,
+	})
 }

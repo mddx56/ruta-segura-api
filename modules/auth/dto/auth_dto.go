@@ -16,6 +16,8 @@ const (
 	MESSAGE_SUCCESS_SEND_PASSWORD_RESET = "envio exitoso de solicitud de restablecimiento de contraseña"
 	MESSAGE_FAILED_RESET_PASSWORD       = "fallo al restablecer contraseña"
 	MESSAGE_SUCCESS_RESET_PASSWORD      = "restablecimiento exitoso de contraseña"
+	MESSAGE_FAILED_GOOGLE_LOGIN         = "fallo el login con Google"
+	MESSAGE_SUCCESS_GOOGLE_LOGIN        = "login con Google exitoso"
 )
 
 var (

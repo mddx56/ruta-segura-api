@@ -32,5 +32,7 @@ func RegisterRoutes(server *gin.Engine, injector *do.Injector) {
 		authRoutes.POST("/verify-email", authController.VerifyEmail)
 		authRoutes.POST("/send-password-reset", authController.SendPasswordReset)
 		authRoutes.POST("/reset-password", authController.ResetPassword)
+		authRoutes.GET("/google", authController.GoogleRedirect)
+		authRoutes.GET("/google/callback", authController.GoogleCallback)
 	}
 }
