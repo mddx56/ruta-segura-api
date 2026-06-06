@@ -271,7 +271,7 @@ func (s *authService) Register(ctx context.Context, req userDto.UserCreateReques
 	user := entities.User{
 		ID:         uuid.New(),
 		Name:       req.Name,
-		Username:   &req.Username,
+		Username:   req.Username,
 		Email:      req.Email,
 		TelpNumber: req.TelpNumber,
 		Password:   req.Password,
@@ -310,7 +310,7 @@ func (s *authService) Signup(ctx context.Context, req userDto.UserCreateRequest)
 	user := entities.User{
 		ID:         uuid.New(),
 		Name:       req.Name,
-		Username:   &req.Username,
+		Username:   req.Username,
 		Email:      req.Email,
 		TelpNumber: req.TelpNumber,
 		Password:   req.Password,
