@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/Caknoooo/go-gin-clean-starter/database/entities"
@@ -29,13 +30,15 @@ type DeviceService interface {
 }
 
 type deviceService struct {
-	repo repository.DeviceRepository
+	repo        repository.DeviceRepository
+	peerChecker PeerChecker
 }
 
 func NewDeviceService(injector *do.Injector) (DeviceService, error) {
 	repo := do.MustInvoke[repository.DeviceRepository](injector)
 	return &deviceService{
-		repo: repo,
+		repo:        repo,
+		peerChecker: NewPeerChecker(),
 	}, nil
 }
 
@@ -48,9 +51,16 @@ func (s *deviceService) Create(ctx context.Context, req dto.DeviceCreateRequest)
 		return dto.DeviceResponse{}, fmt.Errorf("el modelo es requerido")
 	}
 
-	// Validar duplicado de IMEI
+	// Validar duplicado de IMEI en BD local
 	if _, err := s.repo.FindByIMEI(ctx, req.IMEI); err == nil {
 		return dto.DeviceResponse{}, fmt.Errorf("el IMEI '%s' ya se encuentra registrado", req.IMEI)
+	}
+
+	// Validar que el IMEI no esté registrado en el VPS par
+	if exists, err := s.peerChecker.IMEIExistsOnPeer(ctx, req.IMEI); err != nil {
+		log.Printf("[PeerChecker] Error consultando VPS par para IMEI %s: %v — se permite el registro", req.IMEI, err)
+	} else if exists {
+		return dto.DeviceResponse{}, fmt.Errorf("el IMEI '%s' ya se encuentra registrado en el otro servidor", req.IMEI)
 	}
 
 	// Validar duplicado de SimPhoneNumber (solo si se proporcionó)
@@ -371,6 +381,14 @@ func (s *deviceService) bulkValidateItems(ctx context.Context, items []dto.BulkI
 				existingIMEISet[d.IMEI] = true
 			}
 		}
+		// Verificar también en el VPS par
+		if peerFound, err := s.peerChecker.IMEIsExistOnPeer(ctx, allIMEIs); err != nil {
+			log.Printf("[PeerChecker] Error consultando VPS par en bulk: %v — se omite validación cruzada", err)
+		} else {
+			for imei := range peerFound {
+				existingIMEISet[imei] = true
+			}
+		}
 	}
 	if len(allCodSims) > 0 {
 		if existingByCodSim, err := s.repo.FindByCodSims(ctx, allCodSims); err == nil {
@@ -423,7 +441,7 @@ func (s *deviceService) bulkValidateItems(ctx context.Context, items []dto.BulkI
 
 		// Verificar si ya existen en el sistema
 		if item.IMEI != "" && existingIMEISet[item.IMEI] {
-			itemErrors = append(itemErrors, "Este IMEI ya se encuentra registrado en el sistema")
+			itemErrors = append(itemErrors, "Este IMEI ya se encuentra registrado en el sistema (puede ser en este servidor o en el servidor par)")
 		}
 		if item.CodSim != "" && existingCodSimSet[item.CodSim] {
 			itemErrors = append(itemErrors, "Este Código SIM ya se encuentra registrado en el sistema")

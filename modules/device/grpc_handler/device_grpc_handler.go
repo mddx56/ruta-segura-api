@@ -38,3 +38,18 @@ func (h *DeviceGRPCHandler) ListDevicesSimple(ctx context.Context, req *pb.ListD
 
 	return &pb.ListDevicesResponse{Devices: pbDevices}, nil
 }
+
+func (h *DeviceGRPCHandler) CheckIMEIExists(ctx context.Context, req *pb.CheckIMEIRequest) (*pb.CheckIMEIResponse, error) {
+	_, err := h.deviceService.FindByIMEI(ctx, req.Imei)
+	return &pb.CheckIMEIResponse{Exists: err == nil}, nil
+}
+
+func (h *DeviceGRPCHandler) BatchCheckIMEIs(ctx context.Context, req *pb.BatchCheckIMEIsRequest) (*pb.BatchCheckIMEIsResponse, error) {
+	found := make([]string, 0)
+	for _, imei := range req.Imeis {
+		if _, err := h.deviceService.FindByIMEI(ctx, imei); err == nil {
+			found = append(found, imei)
+		}
+	}
+	return &pb.BatchCheckIMEIsResponse{Found: found}, nil
+}

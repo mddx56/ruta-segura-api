@@ -19,6 +19,24 @@ message ListDevicesResponse {
     repeated DeviceItem devices = 1;
 }
 
+message CheckIMEIRequest {
+    string imei = 1;
+}
+
+message CheckIMEIResponse {
+    bool exists = 1;
+}
+
+message BatchCheckIMEIsRequest {
+    repeated string imeis = 1;
+}
+
+message BatchCheckIMEIsResponse {
+    repeated string found = 1;
+}
+
 service DeviceService {
-    rpc ListDevicesSimple (ListDevicesRequest) returns (ListDevicesResponse);
+    rpc ListDevicesSimple  (ListDevicesRequest)      returns (ListDevicesResponse);
+    rpc CheckIMEIExists    (CheckIMEIRequest)         returns (CheckIMEIResponse);
+    rpc BatchCheckIMEIs    (BatchCheckIMEIsRequest)   returns (BatchCheckIMEIsResponse);
 }
